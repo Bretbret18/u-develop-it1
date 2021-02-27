@@ -1,9 +1,9 @@
-// require express.js mod
-const express = require('express');
-
 // require sqlite3 .. sets execution mode to verbose -> to produce messages in terminal
 // regarding runtime state. Can help explain what SQLite app is doing.
 const sqlite3 = require('sqlite3').verbose();
+
+// require express.js mod
+const express = require('express');
 const inputCheck = require('./utils/inputCheck');
 
 // PORT designation / app expression
@@ -23,13 +23,15 @@ const db = new sqlite3.Database('./db/election.db', err => {
     console.log('Connected to the election database. ');
 });
 
-// GET all candidates
+// ******* CANDIDATE ROUTES ********************************//
+
+// GET all candidates and their party affiliation
 app.get('/api/candidates', (req, res) => {
     const sql = `SELECT candidates.*, parties.name 
-    AS party_name 
-    FROM candidates 
-    LEFT JOIN parties 
-    ON candidates.party_id = parties.id`;
+                AS party_name 
+                FROM candidates 
+                LEFT JOIN parties 
+                ON candidates.party_id = parties.id`;
     const params = [];
     db.all(sql, params, (err, rows) => {
         if (err) {
@@ -45,16 +47,16 @@ app.get('/api/candidates', (req, res) => {
 });
 
 
-// GET single candidate
-app.get('/api/candidates/:id', (req, res) => {
+// GET single candidate with party affiliation
+app.get('/api/candidate/:id', (req, res) => {
     const sql = `SELECT candidates.*, parties.name 
-    AS party_name 
-    FROM candidates 
-    LEFT JOIN parties 
-    ON candidates.party_id = parties.id 
-    WHERE candidates.id = ?`;
+                AS party_name 
+                FROM candidates 
+                LEFT JOIN parties 
+                ON candidates.party_id = parties.id 
+                WHERE candidates.id = ?`;
     const params = [req.params.id];
-    db.get(sql, params, (err, row) => {
+    db.get(sql, params, (err, rows) => {
         if (err) {
             res.status(400).json({ error: err.message });
             return;
@@ -62,26 +64,9 @@ app.get('/api/candidates/:id', (req, res) => {
 
         res.json({
             message: 'success',
-            data: row
+            data: rows
         });
     });            
-});
-
-// DELETE a candidate
-app.delete('/api/candidate/:id', (req, res) => {
-    const sql = `DELETE FROM candidates WHERE id = ?`;
-    const params = [req.params.id];
-    db.run(sql, params, function(err, result) {
-        if (err) {
-            res.status(400).json({ error: res.message });
-            return;
-        }
-
-        res.json({
-            message: 'successfully deleted',
-            changes: this.changes
-        });
-    });
 });
 
 // CREATE a candidate
@@ -92,8 +77,8 @@ app.post('/api/candidate', ({ body }, res) => {
         return;
     }
     const sql = `INSERT INTO candidates (first_name, last_name, industry_connected)
-                  VALUES (?,?,?)`;
-    const params = [body.first_name, body.last_name, body.industry_connected];
+                  VALUES (?,?,?,?)`;
+    const params = [body.first_name, body.last_name, body.industry_connected, body.party_id];
     // ES5 function, not arrow function, to use `this`
     db.run(sql, params, function(err, result) {
         if (err) {
@@ -109,58 +94,9 @@ app.post('/api/candidate', ({ body }, res) => {
     });              
 });
 
+// Update a candidate's party
 app.put('/api/candidate/:id', (req, res) => {
-    const sql = `UPDATE candidates SET party_id = ?
-                WHERE id = ?`;
-    const params = [req.body.party_id, req.params.id];
-    
-    db.run(sql, params, function(err, result) {
-        if(err) {
-            res.status(400).json({ error: err.message });
-            return;
-        }
-
-        res.json({
-            message: 'success',
-            data: req.body,
-            changes: this.changes
-        });
-    });
-});
-
-app.get('/api/parties', (req, res) => {
-    const sql = `SELECT * FROM parties`;
-    const params = [];
-    db.all(sql, params, (err, rows) => {
-        if(err) {
-            res.status(500).json({ error: err.message });
-            return;
-        }
-
-        res.json({
-            message: 'success',
-            data: rows
-        });
-    });
-});
-
-app.get('/api/party/:id', (req, res) => {
-    const sql = `SELECT * FROM parties WHERE id = ?`;
-    const params = [req.params.id];
-    db.get(sql, params, (err, row) => {
-        if (err) {
-            res.status(400).json({ error: err.message });
-            return;
-        }
-
-        res.json({
-            message: 'success',
-            data: row
-        });
-    });
-});
-
-app.put('/api/candidate/:id', (req, res) => {
+    // Candidate is allowed to not have party affiliation
     const errors = inputCheck(req.body, 'party_id');
 
 if (errors) {
@@ -185,6 +121,73 @@ if (errors) {
     });
   });
 
+// DELETE a candidate
+app.delete('/api/candidate/:id', (req, res) => {
+    const sql = `DELETE FROM candidates WHERE id = ?`;
+    const params = [req.params.id];
+    db.run(sql, params, function(err, result) {
+        if (err) {
+            res.status(400).json({ error: res.message });
+            return;
+        }
+
+        res.json({
+            message: 'successfully deleted',
+            changes: this.changes
+        });
+    });
+});
+
+//****************** PARTY ROUTES ************************//
+
+// GET all parties
+app.get('/api/parties', (req, res) => {
+    const sql = `SELECT * FROM parties`;
+    const params = [];
+    db.all(sql, params, (err, rows) => {
+        if(err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+
+        res.json({
+            message: 'success',
+            data: rows
+        });
+    });
+});
+
+// GET single party
+app.get('/api/party/:id', (req, res) => {
+    const sql = `SELECT * FROM parties WHERE id = ?`;
+    const params = [req.params.id];
+    db.get(sql, params, (err, rows) => {
+        if (err) {
+            res.status(400).json({ error: err.message });
+            return;
+        }
+
+        res.json({
+            message: 'success',
+            data: rows
+        });
+    });
+});
+
+// Delete a party
+app.delete('/api/party/:id', (req, res) => {
+    const sql = `DELETE FROM parties WHERE id = ?`;
+    const params = [req.params.id]
+    db.run(sql, params, function(err, result) {
+      if (err) {
+        res.status(400).json({ error: res.message });
+        return;
+      }
+  
+      res.json({ message: 'successfully deleted', changes: this.changes });
+    });
+  });
+
 
 
 // Default response for any other request(Not Found) Catch all
@@ -200,23 +203,3 @@ db.on('open', () => {
     });
 });
 
-
-
-// app.get (root of directory) response JSON ('What shows up in localhost: 3001) .. test route
-// app.get('/', (req, res) => {
-//     res.json({
-//         message: 'Hello World'
-//     });
-// });
-
-// // Create a candidate
-// const sql = `INSERT INTO candidates (id, first_name, last_name, industry_connected) 
-//               VALUES (?,?,?,?)`;
-// const params = [1, 'Ronald', 'Firbank', 1];
-// // ES5 function, not arrow function, to use this
-// db.run(sql, params, function(err, result) {
-//   if (err) {
-//     console.log(err);
-//   }
-//   console.log(result, this.lastID);
-// });
